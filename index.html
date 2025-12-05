@@ -1,0 +1,410 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tic Tac Toe — Sam vs Sup</title>
+
+  <style>
+    :root{
+      --bg-1:#0b0e12; --bg-2:#141923;
+      --glass:rgba(255,255,255,.06); --glass-strong:rgba(255,255,255,.10);
+      --border:rgba(255,255,255,.12);
+      --text:#e6eef7; --muted:#9fb1c7;
+      --accent:#7cd2ff; --accent-2:#b4ff7c; --win:#ffe768;
+      --shadow-soft:0 10px 30px rgba(0,0,0,.35); --shadow-ring:0 0 0 1px var(--border);
+      --tile:rgba(255,255,255,.08); --tile-hover:rgba(255,255,255,.12);
+
+      /* Responsive board */
+      --cell-size: clamp(110px, 24vw, 160px);
+      --gap:14px; --radius:14px; --a-fast:.15s; --a-med:.25s;
+
+      /* 👇 Slight zoom-out for the video so it feels less cropped */
+      --video-scale: 0.94; /* try 0.92 or 0.96 to taste */
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0; color:var(--text);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      background:
+        radial-gradient(1200px 600px at 20% 0%, rgba(124,210,255,.15), transparent 60%),
+        radial-gradient(900px 350px at 100% 30%, rgba(180,255,124,.10), transparent 60%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    }
+    .page{ max-width:1100px; margin:32px auto; padding:0 20px 40px; }
+    .title{ font-weight:800; letter-spacing:.3px; font-size:1.35rem; text-shadow:0 1px 0 rgba(0,0,0,.4); margin:0 0 16px; }
+
+    .players-wrap{ display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); margin-bottom:var(--gap); }
+    .player-card{
+      display:grid; grid-template-columns:88px 1fr 14px; align-items:center; gap:12px;
+      background:var(--glass); border:1px solid var(--border); border-radius:var(--radius);
+      padding:12px; box-shadow:var(--shadow-ring),var(--shadow-soft); backdrop-filter:blur(10px);
+      transition:transform var(--a-med) ease, box-shadow var(--a-med) ease, border-color var(--a-med) ease;
+    }
+    .player-card.active{ border-color:rgba(124,210,255,.65); box-shadow:0 0 0 2px rgba(124,210,255,.35), var(--shadow-soft); transform:translateY(-2px); }
+    .player-card.winner{ border-color:var(--win); box-shadow:0 0 0 2px rgba(255,231,104,.35), var(--shadow-soft); }
+
+    .photo{ width:88px;height:88px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:rgba(255,255,255,.06);position:relative;cursor:pointer; }
+    .photo img{ width:100%;height:100%;object-fit:cover;display:none; }
+    .photo .ph{
+      position:absolute; inset:0; display:grid; place-items:center;
+      color:var(--muted); font-size:.8rem; text-align:center; padding:6px;
+    }
+    .meta .name{ font-weight:700; font-size:1.1rem; }
+    .meta .tag{ color:var(--muted); margin-top:3px; }
+    .meta .symbol{ font-weight:800; color:var(--accent-2); }
+    .meta .score{ margin-top:6px; }
+    .turn-indicator{ width:12px;height:12px;border-radius:50%;border:1px solid var(--border); }
+    .player-card.active .turn-indicator{ background:var(--accent); border-color:var(--accent); box-shadow:0 0 8px rgba(124,210,255,.8); }
+
+    /* Center the status bar to the board width */
+    .status{
+      margin: 10px auto 18px;
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      box-shadow: var(--shadow-ring);
+      width: max-content;
+      min-width: calc(3 * var(--cell-size) + 2 * var(--gap)); /* at least board width */
+      max-width: 100%;
+    }
+
+    /* Centered board whose width fits its grid */
+    .board{
+      display: grid;
+      grid-template-columns: repeat(3, var(--cell-size));
+      grid-auto-rows: var(--cell-size);
+      gap: var(--gap);
+      margin: 0 auto var(--gap);     /* center horizontally */
+      position: relative;
+      width: max-content;            /* fit to content width */
+    }
+    .board::before{
+      content:""; position:absolute; inset:-14px; border-radius:24px;
+      background: radial-gradient(260px 180px at 25% 25%, rgba(124,210,255,.08), transparent 60%),
+                  radial-gradient(260px 180px at 75% 75%, rgba(180,255,124,.08), transparent 60%);
+      pointer-events:none; filter:blur(10px);
+    }
+    .cell{
+      display:grid; place-items:center;
+      font-size: clamp(2rem, 6vw, 3rem);
+      font-weight:800; letter-spacing:.8px; color:#f6fbff;
+      background:var(--tile); border-radius:16px; border:1px solid var(--border); box-shadow:var(--shadow-soft);
+      cursor:pointer; user-select:none; transition:transform var(--a-fast), background var(--a-fast), box-shadow var(--a-fast);
+    }
+    .cell:hover{ background:var(--tile-hover); transform:translateY(-1px) scale(1.01); }
+    .cell:active{ transform:translateY(0) scale(.99); }
+    .cell.win{ background:rgba(255,231,104,.14); box-shadow:inset 0 0 0 2px var(--win), var(--shadow-soft); color:var(--win); text-shadow:0 0 6px rgba(255,231,104,.55); }
+
+    /* Center the control buttons under the board */
+    .controls{
+      display: flex; gap: 10px; flex-wrap: wrap;
+      justify-content: center;
+      margin: 0 auto;
+      width: max-content;
+      min-width: calc(3 * var(--cell-size) + 2 * var(--gap));
+      max-width: 100%;
+    }
+    .btn{
+      padding:9px 14px; border-radius:12px; border:1px solid var(--border);
+      background:var(--glass-strong); color:var(--text); cursor:pointer; backdrop-filter:blur(6px);
+      transition:transform var(--a-fast), background var(--a-fast), box-shadow var(--a-fast), border-color var(--a-fast);
+    }
+    .btn:hover{ background:rgba(255,255,255,.14); transform:translateY(-1px); box-shadow:var(--shadow-soft); }
+    .btn:active{ transform:translateY(0); }
+    .btn.secondary{ color:var(--muted); }
+
+    /* Fullscreen win video overlay */
+    .video-overlay{ position:fixed; inset:0; background:#000; display:none; place-items:center; z-index:9999; }
+    .video-overlay.show{ display:grid; }
+
+    /* 👇 Slightly zoomed-out cover so the video crops less */
+    .video-overlay video{
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;          /* immersive full-bleed */
+      object-position: center;
+      outline: none;
+      background: #000;
+      transform: scale(var(--video-scale));
+      transform-origin: center center;
+    }
+
+    /* Winner banner WITHOUT the symbol */
+    .winner-banner{
+      position:fixed; top:12%; left:50%; transform:translateX(-50%);
+      padding:18px 26px; background:rgba(0,0,0,.45); color:#fff; font-weight:800;
+      font-size:clamp(1.4rem,3vw,2.2rem); border-radius:16px; border:1px solid rgba(255,255,255,.2);
+      backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.35); text-align:center; pointer-events:none;
+    }
+
+    .skip-btn{
+      position:fixed; top:16px; right:16px; z-index:10000; padding:8px 12px;
+      border-radius:12px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.45);
+      color:#fff; cursor:pointer; backdrop-filter:blur(6px); transition:transform var(--a-fast), background var(--a-fast);
+    }
+    .skip-btn:hover{ background:rgba(0,0,0,.65); transform:translateY(-1px); }
+
+    /* Hide default media controls (defensive) */
+    #winVideo::-webkit-media-controls { display:none !important; }
+    #winVideo { outline:none; }
+
+    @media (min-width: 1200px) {
+      .page { max-width: 1200px; }
+      :root { --cell-size: clamp(120px, 22vw, 180px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="title">Tic Tac Toe — Sam vs Sup</h1>
+
+    <!-- Players -->
+    <div class="players-wrap">
+      <div class="player-card" id="playerX">
+        <div class="photo" id="photoX" title="Click to choose photo">
+          <img id="imgX" alt="Sam" />
+          <div class="ph" id="phX">Click to set photo</div>
+          <input id="fileX" type="file" accept=".jpg,.jpeg,.png,.JPG,.JPEG,.PNG" hidden />
+        </div>
+        <div class="meta">
+          <div class="name">Sam</div>
+          <div class="tag">Plays: <span class="symbol">X</span></div>
+          <div class="score">Score: <span id="scoreX">0</span></div>
+        </div>
+        <div class="turn-indicator" aria-label="turn"></div>
+      </div>
+
+      <div class="player-card" id="playerO">
+        <div class="photo" id="photoO" title="Click to choose photo">
+          <img id="imgO" alt="Sup" />
+          <div class="ph" id="phO">Click to set photo</div>
+          <input id="fileO" type="file" accept=".jpg,.jpeg,.png,.JPG,.JPEG,.PNG" hidden />
+        </div>
+        <div class="meta">
+          <div class="name">Sup</div>
+          <div class="tag">Plays: <span class="symbol">O</span></div>
+          <div class="score">Score: <span id="scoreO">0</span></div>
+        </div>
+        <div class="turn-indicator" aria-label="turn"></div>
+      </div>
+    </div>
+
+    <!-- Status (centered) -->
+    <div id="statusBar" class="status" role="status" aria-live="polite">Your turn: X (Sam)</div>
+
+    <!-- Board (centered) -->
+    <div id="board" class="board" aria-label="Tic Tac Toe board">
+      <div class="cell" data-idx="0"></div>
+      <div class="cell" data-idx="1"></div>
+      <div class="cell" data-idx="2"></div>
+      <div class="cell" data-idx="3"></div>
+      <div class="cell" data-idx="4"></div>
+      <div class="cell" data-idx="5"></div>
+      <div class="cell" data-idx="6"></div>
+      <div class="cell" data-idx="7"></div>
+      <div class="cell" data-idx="8"></div>
+    </div>
+
+    <!-- Controls (centered) -->
+    <div class="controls">
+      <button id="btnReset" class="btn" type="button">Reset Scores</button>
+      <button id="btnAgain" class="btn" type="button">Play Again</button>
+      <button id="btnSwap"  class="btn secondary" type="button">Swap Starter</button>
+    </div>
+  </div>
+
+  <!-- Win video overlay -->
+  <div id="videoOverlay" class="video-overlay" aria-hidden="true">
+    <video id="winVideo" preload="auto" playsinline muted></video>
+    <div id="winnerBanner" class="winner-banner" aria-live="polite"></div>
+    <button id="skipVideo" class="skip-btn" type="button" aria-label="Skip video">Skip ⨯</button>
+  </div>
+
+  <script>
+    (function(){
+      // ======== Game State ========
+      let board = Array(9).fill(null);
+      let current = 'X';
+      let xStarts = true;
+      let gameOver = false;
+      let scoreX = 0, scoreO = 0;
+
+      const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+      // ======== DOM ========
+      const cells = Array.from(document.querySelectorAll('.cell'));
+      const statusBar = document.getElementById('statusBar');
+      const btnReset = document.getElementById('btnReset');
+      const btnAgain = document.getElementById('btnAgain');
+      const btnSwap  = document.getElementById('btnSwap');
+
+      const players = {
+        X: { name:'Sam',
+          imgEl:document.getElementById('imgX'), phEl:document.getElementById('phX'),
+          fileEl:document.getElementById('fileX'), photoBox:document.getElementById('photoX'),
+          cardEl:document.getElementById('playerX'), scoreEl:document.getElementById('scoreX')
+        },
+        O: { name:'Sup',
+          imgEl:document.getElementById('imgO'), phEl:document.getElementById('phO'),
+          fileEl:document.getElementById('fileO'), photoBox:document.getElementById('photoO'),
+          cardEl:document.getElementById('playerO'), scoreEl:document.getElementById('scoreO')
+        }
+      };
+
+      // Video overlay
+      const videoOverlay  = document.getElementById('videoOverlay');
+      const winVideo      = document.getElementById('winVideo');
+      const skipBtn       = document.getElementById('skipVideo');
+      const winnerBanner  = document.getElementById('winnerBanner');
+      const once = (t,e)=>new Promise(r=>t.addEventListener(e,r,{once:true}));
+      const WIN_SRC = './win.mp4'; // keep win.mp4 next to index.html
+
+      // ======== Photos: auto + click-to-pick + persistence ========
+      function showImg(p, url){ p.imgEl.src = url; p.imgEl.style.display='block'; p.phEl.style.display='none'; }
+      function showPlaceholder(p, text){ p.imgEl.style.display='none'; p.phEl.style.display='grid'; p.phEl.textContent = text || 'Click to set photo'; }
+      function savePhoto(key, dataURL){ try{ localStorage.setItem(key, dataURL) }catch{} }
+      function loadPhoto(key){ try{ return localStorage.getItem(key) }catch{ return null } }
+      function probe(url){ return new Promise(res=>{ const i=new Image(); i.onload=()=>res(true); i.onerror=()=>res(false); i.src=url+'?v='+(Date.now()); }); }
+
+      async function initPhoto(p, baseName, storageKey){
+        const saved = loadPhoto(storageKey);
+        if (saved){ showImg(p, saved); return; }
+        const candidates = [`./${baseName}.jpg`,`./${baseName}.jpeg`,`./${baseName}.png`,`./${baseName}.JPG`,`./${baseName}.JPEG`,`./${baseName}.PNG`];
+        for (const c of candidates){ if (await probe(c)){ showImg(p, c); return; } }
+        showPlaceholder(p);
+      }
+      function hookPhotoPicker(p, storageKey){
+        p.photoBox.addEventListener('click', ()=> p.fileEl.click());
+        p.fileEl.addEventListener('change', ()=>{
+          const f = p.fileEl.files && p.fileEl.files[0];
+          if (!f) return;
+          const reader = new FileReader();
+          reader.onload = ()=>{ const dataURL = reader.result; showImg(p, dataURL); savePhoto(storageKey, dataURL); };
+          reader.readAsDataURL(f);
+        });
+        p.imgEl.addEventListener('error', ()=> showPlaceholder(p, 'Click to set photo'));
+      }
+      hookPhotoPicker(players.X, 'photoX');
+      hookPhotoPicker(players.O, 'photoO');
+      initPhoto(players.X, 'sam', 'photoX');
+      initPhoto(players.O, 'sup', 'photoO');
+
+      // ======== UI helpers ========
+      function updateStatus(text){ statusBar.textContent = text; }
+      function updateTurnUI(){
+        players.X.cardEl.classList.remove('active','winner');
+        players.O.cardEl.classList.remove('active','winner');
+        (current==='X'?players.X.cardEl:players.O.cardEl).classList.add('active');
+        players.X.scoreEl.textContent = String(scoreX);
+        players.O.scoreEl.textContent = String(scoreO);
+      }
+      function render(){ cells.forEach((c,i)=>{ c.textContent = board[i] || ''; c.classList.remove('win'); }); }
+
+      // ======== Game logic ========
+      function checkWinner(){
+        for(const line of wins){
+          const [a,b,c]=line;
+          if(board[a] && board[a]===board[b] && board[a]===board[c]){
+            line.forEach(idx=>cells[idx].classList.add('win')); return board[a];
+          }
+        }
+        if(board.every(x=>x)) return 'Draw';
+        return null;
+      }
+      function nextTurn(){ current = (current==='X') ? 'O' : 'X'; updateStatus(`Your turn: ${current} (${players[current].name})`); updateTurnUI(); }
+      function onResult(res){
+        gameOver = true;
+        if(res==='X'){ scoreX++; players.X.cardEl.classList.add('winner'); updateStatus(`X wins! (${players.X.name})`); playWinVideo('X'); }
+        else if(res==='O'){ scoreO++; players.O.cardEl.classList.add('winner'); updateStatus(`O wins! (${players.O.name})`); playWinVideo('O'); }
+        else { updateStatus(`It’s a draw!`); }
+        updateTurnUI();
+      }
+
+      // per-cell listeners
+      function handleMove(idx){
+        if (gameOver || board[idx]) return;
+        board[idx] = current;
+        cells[idx].textContent = current;
+        const res = checkWinner();
+        if (res) onResult(res); else nextTurn();
+      }
+      cells.forEach((cell, idx)=> cell.addEventListener('click', ()=>handleMove(idx)));
+
+      // ======== Reset / controls ========
+      function resetBoard(hard=false){
+        board = Array(9).fill(null);
+        cells.forEach(c=>c.classList.remove('win'));
+        players.X.cardEl.classList.remove('winner');
+        players.O.cardEl.classList.remove('winner');
+        gameOver = false;
+        if(hard){ scoreX=0; scoreO=0; }
+        current = xStarts ? 'X' : 'O';
+        render();
+        updateStatus(`Your turn: ${current} (${players[current].name})`);
+        updateTurnUI();
+        hideWinVideo();
+      }
+      function playAgain(){ xStarts=!xStarts; resetBoard(false); }
+      function swapStarter(){ xStarts=!xStarts; current = xStarts ? 'X' : 'O'; updateStatus(`Starter swapped. ${players[current].name} (${current}) begins.`); updateTurnUI(); }
+
+      btnReset.addEventListener('click', ()=>resetBoard(true));
+      btnAgain.addEventListener('click', playAgain);
+      btnSwap.addEventListener('click', swapStarter);
+
+      // keyboard
+      document.addEventListener('keydown', (e)=>{
+        if (gameOver) return;
+        const k = e.key;
+        if (/[1-9]/.test(k)){ handleMove(Number(k)-1); }
+        else if (k==='r' || k==='R'){ playAgain(); }
+      });
+
+      // ======== Win video overlay (loops until Skip) ========
+      function setWinnerBanner(symbol){
+        const name = players[symbol].name;
+        winnerBanner.textContent = `${name} Wins!`;  // no symbol appended
+      }
+      async function playWinVideo(symbol){
+        setWinnerBanner(symbol);
+
+        videoOverlay.classList.add('show');
+        videoOverlay.setAttribute('aria-hidden','false');
+
+        try { winVideo.pause(); } catch {}
+        winVideo.loop = true;         // keep playing
+        winVideo.muted = true;        // allow autoplay
+        winVideo.removeAttribute('controls');
+        winVideo.src = './win.mp4';   // ensure win.mp4 exists
+        winVideo.currentTime = 0;
+        winVideo.load();
+
+        await Promise.race([ once(winVideo,'loadedmetadata'), once(winVideo,'canplay'), once(winVideo,'canplaythrough') ]);
+
+        try {
+          await winVideo.play();
+          winVideo.muted = false;     // try to unmute after play starts
+        } catch {
+          winVideo.muted = true;
+          try { await winVideo.play(); } catch {}
+        }
+      }
+      function hideWinVideo(){
+        videoOverlay.classList.remove('show');
+        videoOverlay.setAttribute('aria-hidden','true');
+        try { winVideo.pause(); } catch {}
+      }
+      document.getElementById('skipVideo').addEventListener('click', hideWinVideo);
+
+      // ======== Initial paint ========
+      render();
+      updateStatus(`Your turn: ${current} (${players[current].name})`);
+      updateTurnUI();
+    })();
+  </script>
+</body>
+</html>
